@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 import io
 from collections import Counter
 import pandas as pd
 import streamlit as st
 
+from database import HirelyDB
 from ml_pipeline import analyze_resume, preprocess_text, rank_candidates
 from resume_parser import parse_pdf
 from utils import CandidateRecord, SKILL_DICTIONARY, parse_required_skills, safe_candidate_name
@@ -12,6 +14,7 @@ from utils import CandidateRecord, SKILL_DICTIONARY, parse_required_skills, safe
 
 st.set_page_config(page_title="Hirely — AI Resume Screening", page_icon="🧠", layout="wide")
 
+db = HirelyDB()
 
 CUSTOM_CSS = """
 <style>
@@ -25,20 +28,25 @@ CUSTOM_CSS = """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 if "job" not in st.session_state:
-    st.session_state.job = {"title": "", "description": "", "required_skills": []}
+    latest_job = db.get_latest_job()
+    st.session_state.job = {
+        "title": latest_job["title"] if latest_job else "",
+        "description": latest_job["description"] if latest_job else "",
+        "required_skills": latest_job["required_skills"] if latest_job else [],
+        "id": latest_job["id"] if latest_job else None,
+    }
 if "candidates" not in st.session_state:
-    st.session_state.candidates = []
+    st.session_state.candidates = db.load_candidates()
 if "ranked_candidates" not in st.session_state:
-    st.session_state.ranked_candidates = []
-
+    st.session_state.ranked_candidates = db.load_results()
 
 with st.sidebar:
     st.title("Hirely")
+    st.caption(f"Skill taxonomy size: {len(SKILL_DICTIONARY)}")
     page = st.radio(
         "Navigation",
         ["Dashboard", "Create Job Description", "Upload Resumes", "Candidate Ranking", "Candidate Insights"],
     )
-
 
 st.markdown(f"<div class='hirely-header'>{page}</div>", unsafe_allow_html=True)
 
@@ -87,12 +95,15 @@ elif page == "Create Job Description":
         )
 
         if st.button("Save Job Description", type="primary"):
+            required_skills = parse_required_skills(skills_raw)
+            job_id = db.save_job(title.strip(), description.strip(), required_skills)
             st.session_state.job = {
                 "title": title.strip(),
                 "description": description.strip(),
-                "required_skills": parse_required_skills(skills_raw),
+                "required_skills": required_skills,
+                "id": job_id,
             }
-            st.success("Job profile saved.")
+            st.success(f"Job profile saved to SQLite (job_id={job_id}).")
 
 elif page == "Upload Resumes":
     uploads = st.file_uploader("Upload PDF resumes", type=["pdf"], accept_multiple_files=True)
@@ -111,13 +122,17 @@ elif page == "Upload Resumes":
                 resume_text=text,
                 cleaned_text=analysis["cleaned_text"],
                 extracted_skills=analysis["skills"],
-            ).__dict__
-            processed.append(record)
+            )
+            processed.append(asdict(record))
             progress.progress(idx / len(uploads))
+
+        candidate_ids = db.replace_candidates(processed)
+        for idx, candidate_id in enumerate(candidate_ids):
+            processed[idx]["id"] = candidate_id
 
         st.session_state.candidates = processed
         st.session_state.ranked_candidates = []
-        st.success(f"Processed {len(processed)} resumes.")
+        st.success(f"Processed and stored {len(processed)} resumes.")
 
     if st.session_state.candidates:
         for candidate in st.session_state.candidates:
@@ -146,11 +161,14 @@ elif page == "Candidate Ranking":
     else:
         if st.button("Run Ranking", type="primary"):
             job_text = preprocess_text(job["description"])
-            st.session_state.ranked_candidates = rank_candidates(
+            ranked = rank_candidates(
                 job_text=job_text,
                 candidates=candidates,
                 required_skills=job["required_skills"],
             )
+            st.session_state.ranked_candidates = ranked
+            if job.get("id"):
+                db.save_results(job_id=job["id"], ranked_candidates=ranked)
 
         ranked = st.session_state.ranked_candidates
         if ranked:
@@ -209,6 +227,6 @@ elif page == "Candidate Insights":
                 st.markdown(f"**Missing Skills:** {', '.join(c['missing_skills']) if c['missing_skills'] else 'None'}")
                 st.markdown(f"**Resume Highlights:** {', '.join(c['extracted_skills'][:8]) or 'No highlights found'}")
                 st.markdown(
-                    "**Match Explanation:** Candidate score blends semantic alignment with required skill coverage. "
+                    "**Match Explanation:** Final score = 0.7×semantic_similarity + 0.3×skill_match_ratio, then scaled to 0-100. "
                     f"This profile scored {c['semantic_score']}% semantically and {c['skill_match_pct']}% on required skills."
                 )

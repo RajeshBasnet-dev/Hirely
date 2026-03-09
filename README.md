@@ -1,100 +1,134 @@
-Hirely AI-Powered Resume Screening Platform
+# Hirely — Resume Screener
 
-Hirely is a lightweight AI-driven resume screening application built with Streamlit. It enables recruiters to quickly evaluate candidate resumes against a job description using natural language processing techniques such as text preprocessing, skill extraction, and semantic similarity ranking.
+Hirely is a portfolio-grade resume screening platform built with Streamlit and a hybrid NLP ranking engine. It parses resumes, extracts skills from a large skill taxonomy, computes semantic relevance to a job description, and ranks candidates with transparent scoring and persisted results in SQLite.
 
-The system analyzes uploaded resumes and ranks candidates based on how closely their profiles match the required job criteria.
+## Project Overview
 
-Key Features
+Hirely helps recruiters and hiring teams:
+- Upload and parse PDF resumes.
+- Store jobs, candidates, and ranking outputs in a local database.
+- Rank candidates using **hybrid scoring** (semantic relevance + required skill coverage).
+- Inspect candidate-level explanations for decision support.
+- Evaluate ranking quality with benchmark metrics.
 
-Automated Resume Screening
-Evaluates resumes against job descriptions to identify the most relevant candidates.
+## Features
 
-Semantic Resume Matching
-Uses TF-IDF vectorization and cosine similarity to measure alignment between resumes and job requirements.
+- **Multi-page Streamlit dashboard** for end-to-end screening workflow.
+- **Dynamic skill extraction** using a JSON taxonomy (`data/skills.json`) with 600+ skills.
+- **Hybrid ranking engine**:
+  - Semantic similarity (TF-IDF + cosine similarity)
+  - Skill match ratio against required skills
+- **Persistent storage** via SQLite (`hirely.db`) with tables for jobs, candidates, results.
+- **Evaluation module** with Precision@K, Recall@K, and MRR.
+- **Explainable outputs** showing semantic score, skill match %, and missing skills.
 
-Skill Extraction
-Detects relevant technical and domain-specific skills using pattern-based extraction.
+## System Architecture
 
-Candidate Ranking
-Scores and ranks candidates based on semantic similarity and skill coverage.
-
-Interactive Dashboard
-Built with Streamlit for easy uploading, analysis, and visualization of candidate rankings.
-Refactored Architecture
-
-To ensure full compatibility with Python 3.14, this project removes the dependency on spaCy and instead uses lightweight NLP techniques built on standard Python libraries.
-
-Current Processing Pipeline
-
+```text
+User Upload Resume
+        ↓
+PDF Parser (PyMuPDF)
+        ↓
 Text Preprocessing
+        ↓
+Skill Extraction (skills.json taxonomy)
+        ↓
+Semantic Similarity Engine (TF-IDF + Cosine)
+        ↓
+Hybrid Ranking Engine
+        ↓
+SQLite Storage (jobs, candidates, results)
+        ↓
+Streamlit Dashboard
+```
 
-Regex-based text cleaning
+## NLP Pipeline
 
-Stopword filtering
+1. **PDF parsing** (`resume_parser.py`) extracts text from uploaded resumes.
+2. **Preprocessing** (`ml_pipeline.py`) normalizes and tokenizes text.
+3. **Skill extraction** (`skill_extractor.py`) matches normalized terms from `data/skills.json`.
+4. **Semantic scoring** computes cosine similarity between the job text and each candidate profile.
+5. **Hybrid ranking** blends semantic similarity and skill coverage.
 
-Normalization
+## Scoring Algorithm
 
-Feature Extraction
+For each candidate:
 
-TfidfVectorizer from scikit-learn
+- `semantic_similarity` ∈ [0, 1]
+- `skill_match_ratio` ∈ [0, 1]
 
-Semantic Similarity
+Final score:
 
-Cosine similarity between job descriptions and resumes
+```text
+final_score = (0.7 * semantic_similarity + 0.3 * skill_match_ratio) * 100
+```
 
-Skill Matching
+This avoids misleading scaling and ensures normalization to 0–100 only at the end.
 
-Regex-based dictionary extraction for relevant skills
+## Data Model & Persistence
 
-Candidate Ranking
+### SQLite tables
 
-Combined scoring based on semantic similarity and skill coverage
+- `jobs`: title, description, required skills
+- `candidates`: parsed resume text, cleaned text, extracted skills
+- `results`: final scores + explainability fields
 
-This approach keeps the application lightweight, fast, and deployable without large NLP dependencies.
+Database helper module: `database.py`.
 
-Installation
+## Evaluation & Benchmark
 
-Install dependencies:
+`evaluation.py` includes:
+- A mini benchmark dataset with expected relevant candidates.
+- Ranking metrics:
+  - Precision@K
+  - Recall@K
+  - Mean Reciprocal Rank (MRR)
 
+Run:
+
+```bash
+python evaluation.py
+```
+
+## Example Ranking Output
+
+| Rank | Candidate | Semantic % | Skill Match % | Final Match % | Missing Skills |
+|------|-----------|------------|---------------|---------------|----------------|
+| 1 | Alice Johnson | 84.3 | 100.0 | 88.99 | None |
+| 2 | Ben Torres | 73.6 | 80.0 | 75.52 | Hugging Face Transformers |
+| 3 | Carla Smith | 21.0 | 0.0 | 14.70 | Python, SQL, NLP, MLOps |
+
+## Screenshots
+
+> Add screenshots by running the app locally and capturing Dashboard, Ranking, and Insights pages.
+
+## Setup Instructions
+
+```bash
 pip install -r requirements.txt
-
-Run the application:
-
 streamlit run app.py
-Project Structure
-Hirely/
-│
-├── app.py            # Streamlit application interface
-├── ml_pipeline.py    # Resume processing and ranking logic
-├── requirements.txt  # Project dependencies
-Future Enhancements
+```
 
-The current architecture allows easy integration of more advanced NLP systems if deeper analysis is required.
+## Project Structure
 
-Potential upgrades include:
+```text
+hirely/
+├── app.py
+├── ml_pipeline.py
+├── resume_parser.py
+├── database.py
+├── evaluation.py
+├── skill_extractor.py
+├── utils.py
+├── data/
+│   └── skills.json
+├── requirements.txt
+└── README.md
+```
 
-Transformers (Hugging Face) — contextual embeddings for improved semantic matching
+## Why this is portfolio-ready
 
-Stanza — full linguistic pipelines
-
-NLTK — expanded lexical analysis
-
-Sentence Transformers — semantic embeddings for high-accuracy resume ranking
-
-These can be added without major changes to the current pipeline.
-
-Use Cases
-
-Hirely is suitable for:
-
-HR teams screening large volumes of resumes
-
-Early-stage recruiting automation
-
-AI/ML demo projects for recruitment technology
-
-Educational NLP and machine learning projects
-
-License
-
-This project is intended for educational and demonstration purposes.
+- Clean separation of UI, NLP pipeline, and persistence.
+- Explainable and reproducible ranking outputs.
+- Benchmark-oriented evaluation for technical review.
+- Lightweight and deployable architecture without heavyweight infra.
