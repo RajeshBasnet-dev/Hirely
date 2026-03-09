@@ -18,6 +18,16 @@ Hirely is a Streamlit recruiting dashboard that helps recruiters screen resumes 
 - `resume_parser.py` — PDF text extraction (PyMuPDF)
 - `skill_extractor.py` — dictionary-based skill extraction
 - `utils.py` — shared constants, helpers, candidate schema
+- `.streamlit/config.toml` — Streamlit app configuration
+- `runtime.txt` — Python runtime pin for Streamlit Cloud
+
+## Python / Dependency Compatibility (Streamlit Cloud)
+
+This project pins a spaCy-compatible runtime to avoid `pydantic.v1` import issues seen on unsupported Python versions:
+
+- Python: `3.11` (`runtime.txt`)
+- spaCy: `3.7.2`
+- pydantic: `1.10.13`
 
 ## Machine Learning Pipeline
 
@@ -32,9 +42,11 @@ Hirely is a Streamlit recruiting dashboard that helps recruiters screen resumes 
 
 ```bash
 pip install -r requirements.txt
-python -m spacy download en_core_web_sm  # optional but recommended
+python -m spacy download en_core_web_sm
 streamlit run app.py
 ```
+
+> `ml_pipeline.py` also attempts to download `en_core_web_sm` automatically if the model is missing.
 
 ## Usage
 
@@ -43,7 +55,3 @@ streamlit run app.py
 3. Click **Process Resumes**.
 4. Open **Candidate Ranking** and click **Run Ranking**.
 5. Explore **Candidate Insights** charts and profile-level explanations.
-
-## Example Resumes
-
-For testing, place sample PDF resumes in a local folder (e.g., `examples/`) and upload them from the **Upload Resumes** page.

@@ -1,12 +1,29 @@
 from __future__ import annotations
 
 from typing import Iterable, List, Dict
+import subprocess
+import sys
+
 import numpy as np
 import spacy
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
 from skill_extractor import extract_skills
+
+
+def load_spacy_model():
+    """Load spaCy English model, downloading on first run if needed."""
+    try:
+        return spacy.load("en_core_web_sm")
+    except OSError:
+        subprocess.run(
+            [sys.executable, "-m", "spacy", "download", "en_core_web_sm"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        return spacy.load("en_core_web_sm")
 
 
 class NLPResources:
@@ -17,16 +34,7 @@ class NLPResources:
     @property
     def nlp(self):
         if self._nlp is None:
-            try:
-                self._nlp = spacy.load("en_core_web_sm")
-            except OSError:
-                self._nlp = spacy.blank("en")
-                if "sentencizer" not in self._nlp.pipe_names:
-                    self._nlp.add_pipe("sentencizer")
-            if not self._nlp.Defaults.stop_words:
-                self._nlp.Defaults.stop_words |= {
-                    "the", "a", "an", "and", "or", "is", "to", "for", "with", "of", "in", "on", "by"
-                }
+            self._nlp = load_spacy_model()
         return self._nlp
 
     @property
