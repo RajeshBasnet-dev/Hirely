@@ -18,7 +18,8 @@ def _import_spacy():
         import spacy  # type: ignore
 
         return spacy
-    except ImportError:
+    except Exception:
+        # Covers ImportError and spaCy/pydantic compatibility failures on unsupported Python versions.
         return None
 
 

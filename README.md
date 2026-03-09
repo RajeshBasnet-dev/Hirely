@@ -2,75 +2,75 @@
 
 Hirely is a Streamlit recruiting dashboard that helps recruiters screen resumes against a job description using NLP and semantic similarity.
 
-## Features
+## Why you were seeing `pydantic.v1.errors.ConfigError` on Python 3.14
 
-- Upload and parse multiple PDF resumes
-- NLP-based preprocessing and skill extraction
-- Job description + required skills input flow
-- Semantic matching using Sentence Transformers (`all-MiniLM-L6-v2`)
-- Candidate ranking with weighted score blending semantic and skill-match signals
-- Candidate insights including skill gaps and comparison charts
+The error (`unable to infer type for attribute "REGEX"`) is a **runtime compatibility issue** in the dependency chain:
 
-## Project Structure
+- `spaCy 3.x` relies on `pydantic v1`
+- `pydantic v1` has compatibility gaps on `Python 3.14`
+- importing spaCy on Python 3.14 can fail before your app logic runs
 
-- `app.py` — Streamlit UI and page navigation
-- `ml_pipeline.py` — preprocessing, embeddings, ranking logic
-- `resume_parser.py` — PDF text extraction (PyMuPDF)
-- `skill_extractor.py` — dictionary-based skill extraction
-- `utils.py` — shared constants, helpers, candidate schema
-- `.streamlit/config.toml` — Streamlit app configuration
-- `runtime.txt` — Python runtime pin for Streamlit Cloud
+So this is not a bug in your Hirely business logic. The fix is to run on a supported Python runtime (3.10/3.11) and pin compatible package versions.
 
-## Python / Dependency Compatibility (Streamlit Cloud)
+## Compatibility Fix Applied
 
-This project pins a spaCy-compatible runtime to avoid `pydantic.v1` import issues seen on unsupported Python versions:
+- Python pinned to `3.11` (`runtime.txt`, `.python-version`)
+- `spacy==3.7.2`
+- `pydantic==1.10.13`
 
-- Python: `3.11` (`runtime.txt`)
-- spaCy: `3.7.2`
-- pydantic: `1.10.13`
-
-## Machine Learning Pipeline
-
-1. **Resume Parsing**: Extract text from uploaded PDF files via PyMuPDF.
-2. **Text Preprocessing**: Lowercase, stopword/punctuation removal, and token normalization via spaCy.
-3. **Skill Extraction**: Match skills against a predefined dictionary.
-4. **Text Embeddings**: Encode job/resume text using `all-MiniLM-L6-v2`.
-5. **Similarity Scoring**: Compute cosine similarity and map to a 0–100 scale.
-6. **Skill Gap Analysis**: Compare required skills with extracted skills and identify missing skills.
-
-## Run Locally
+## Required Setup (Windows / Local)
 
 ```bash
+py -3.11 -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 streamlit run app.py
 ```
 
-> `ml_pipeline.py` also attempts to download `en_core_web_sm` automatically if the model is missing.
+## Streamlit Deployment Notes
 
-## Usage
+This repo is prepared for Streamlit deployment with:
 
-1. Open **Create Job Description** and save role details.
-2. Open **Upload Resumes** and upload multiple `.pdf` resumes.
-3. Click **Process Resumes**.
-4. Open **Candidate Ranking** and click **Run Ranking**.
-5. Explore **Candidate Insights** charts and profile-level explanations.
+- `runtime.txt` (Python version)
+- `.streamlit/config.toml` (app config)
+- `requirements.txt` (pinned dependencies)
 
+## Project Structure
+
+```text
+hirely/
+├── app.py
+├── ml_pipeline.py
+├── requirements.txt
+└── .streamlit/
+    └── config.toml
+```
+
+(Additional files in the repo support PDF parsing, utilities, and docs.)
+
+## Features
+
+- Upload and parse multiple PDF resumes
+- NLP preprocessing + skill extraction
+- Semantic matching with sentence embeddings (`all-MiniLM-L6-v2`)
+- Candidate ranking with skill-gap analysis
+- Candidate insights charts in Streamlit
 
 ## Troubleshooting
 
 ### `ModuleNotFoundError: No module named "spacy"`
 
-Install dependencies first:
+Install dependencies in the active virtual environment:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-If you still don’t have the spaCy model:
+Then install the language model:
 
 ```bash
 python -m spacy download en_core_web_sm
 ```
 
-The app now includes a fallback text preprocessing path so it can start even if spaCy/model installation is missing, but best ranking quality is achieved with spaCy installed.
+`ml_pipeline.py` includes a fallback preprocessing path so the app can still start if spaCy/model loading fails, but best NLP quality requires spaCy + model installed.
