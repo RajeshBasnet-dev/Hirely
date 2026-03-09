@@ -13,8 +13,8 @@ Hirely helps recruiters and hiring teams:
 
 ## Features
 
-- **Multi-page Streamlit dashboard** for end-to-end screening workflow.
-- **Dynamic skill extraction** using a JSON taxonomy (`data/skills.json`) with 600+ skills.
+- **Multi-page Streamlit dashboard** for end-to-end screening workflow, including a **Ranker Evaluation** page.
+- **Dynamic skill extraction** using a curated JSON taxonomy (`data/skills.json`) with 236 real-world skills.
 - **Hybrid ranking engine**:
   - Semantic similarity (TF-IDF + cosine similarity)
   - Skill match ratio against required skills
@@ -77,12 +77,16 @@ Database helper module: `database.py`.
 
 ## Evaluation & Benchmark
 
-`evaluation.py` includes:
-- A mini benchmark dataset with expected relevant candidates.
-- Ranking metrics:
-  - Precision@K
-  - Recall@K
-  - Mean Reciprocal Rank (MRR)
+`evaluation.py` includes a mini benchmark dataset with expected relevant candidates and computes:
+- Precision@K
+- Recall@K
+- Mean Reciprocal Rank (MRR)
+
+Current benchmark output (`python evaluation.py`, `k=2`):
+
+| precision@k | recall@k | mrr |
+|-------------|----------|-----|
+| 0.75 | 1.00 | 1.00 |
 
 Run:
 

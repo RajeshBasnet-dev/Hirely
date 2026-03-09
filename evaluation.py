@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
+import pandas as pd
+
 from ml_pipeline import preprocess_text, rank_candidates
 
 
@@ -51,20 +53,8 @@ def evaluate_case(case: EvalCase, k: int = 3) -> dict[str, float]:
     }
 
 
-def evaluate_benchmark(cases: Iterable[EvalCase], k: int = 3) -> dict[str, float]:
-    scores = [evaluate_case(case, k=k) for case in cases]
-    if not scores:
-        return {"precision@k": 0.0, "recall@k": 0.0, "mrr": 0.0}
-
-    return {
-        "precision@k": round(sum(s["precision@k"] for s in scores) / len(scores), 3),
-        "recall@k": round(sum(s["recall@k"] for s in scores) / len(scores), 3),
-        "mrr": round(sum(s["mrr"] for s in scores) / len(scores), 3),
-    }
-
-
-if __name__ == "__main__":
-    benchmark = [
+def default_benchmark_cases() -> list[EvalCase]:
+    return [
         EvalCase(
             job_description="Looking for an NLP engineer with Python, SQL, Transformers, and MLOps experience.",
             required_skills=["Python", "SQL", "NLP", "Hugging Face Transformers", "MLOps"],
@@ -111,4 +101,21 @@ if __name__ == "__main__":
         ),
     ]
 
-    print("Benchmark:", evaluate_benchmark(benchmark, k=2))
+
+def evaluate_benchmark(cases: Iterable[EvalCase] | None = None, k: int = 3) -> pd.DataFrame:
+    cases = list(cases) if cases is not None else default_benchmark_cases()
+    scores = [evaluate_case(case, k=k) for case in cases]
+    if not scores:
+        aggregate = {"precision@k": 0.0, "recall@k": 0.0, "mrr": 0.0}
+    else:
+        aggregate = {
+            "precision@k": round(sum(s["precision@k"] for s in scores) / len(scores), 3),
+            "recall@k": round(sum(s["recall@k"] for s in scores) / len(scores), 3),
+            "mrr": round(sum(s["mrr"] for s in scores) / len(scores), 3),
+        }
+
+    return pd.DataFrame([aggregate], index=["overall"])
+
+
+if __name__ == "__main__":
+    print(evaluate_benchmark(k=2).to_string())

@@ -45,8 +45,12 @@ with st.sidebar:
     st.caption(f"Skill taxonomy size: {len(SKILL_DICTIONARY)}")
     page = st.radio(
         "Navigation",
-        ["Dashboard", "Create Job Description", "Upload Resumes", "Candidate Ranking", "Candidate Insights"],
+        ["Dashboard", "Create Job Description", "Upload Resumes", "Candidate Ranking", "Candidate Insights", "Ranker Evaluation"],
     )
+
+    if st.sidebar.button("Clear Session"):
+        st.session_state.clear()
+        st.experimental_rerun()
 
 st.markdown(f"<div class='hirely-header'>{page}</div>", unsafe_allow_html=True)
 
@@ -230,3 +234,10 @@ elif page == "Candidate Insights":
                     "**Match Explanation:** Final score = 0.7×semantic_similarity + 0.3×skill_match_ratio, then scaled to 0-100. "
                     f"This profile scored {c['semantic_score']}% semantically and {c['skill_match_pct']}% on required skills."
                 )
+
+elif page == "Ranker Evaluation":
+    from evaluation import evaluate_benchmark
+
+    results_df = evaluate_benchmark()
+    st.header("Ranker Evaluation Results")
+    st.dataframe(results_df, use_container_width=True)
