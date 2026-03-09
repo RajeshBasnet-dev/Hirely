@@ -1,49 +1,100 @@
-# Hirely — AI-Powered Resume Screening App
+Hirely — AI-Powered Resume Screening Platform
 
-Hirely is a Streamlit recruiting dashboard that helps recruiters screen resumes against a job description using NLP preprocessing, skill extraction, and semantic ranking.
+Hirely is a lightweight AI-driven resume screening application built with Streamlit. It enables recruiters to quickly evaluate candidate resumes against a job description using natural language processing techniques such as text preprocessing, skill extraction, and semantic similarity ranking.
 
-## Why spaCy breaks on Python 3.14
+The system analyzes uploaded resumes and ranks candidates based on how closely their profiles match the required job criteria.
 
-Your error:
+Key Features
 
-`pydantic.v1.errors.ConfigError: unable to infer type for attribute "REGEX"`
+Automated Resume Screening
+Evaluates resumes against job descriptions to identify the most relevant candidates.
 
-is a compatibility issue in the legacy dependency chain:
+Semantic Resume Matching
+Uses TF-IDF vectorization and cosine similarity to measure alignment between resumes and job requirements.
 
-- spaCy 3.x internally depends on pydantic v1 models in multiple schema modules.
-- pydantic v1 is legacy and not maintained for new Python runtime internals at the same level as pydantic v2.
-- On Python 3.14, importing spaCy can trigger pydantic v1 model construction failures (including `REGEX` inference errors), causing startup failures before app code runs.
+Skill Extraction
+Detects relevant technical and domain-specific skills using pattern-based extraction.
 
-## Python 3.14-compatible solution in this repo
+Candidate Ranking
+Scores and ranks candidates based on semantic similarity and skill coverage.
 
-This project was refactored to remove runtime dependency on spaCy/pydantic v1:
+Interactive Dashboard
+Built with Streamlit for easy uploading, analysis, and visualization of candidate rankings.
+Refactored Architecture
 
-- Text preprocessing now uses regex + stopword filtering.
-- Semantic similarity now uses `TfidfVectorizer` + cosine similarity from scikit-learn.
-- Skill extraction remains dictionary-based regex matching.
-- Candidate ranking blends semantic similarity with required-skill coverage.
+To ensure full compatibility with Python 3.14, this project removes the dependency on spaCy and instead uses lightweight NLP techniques built on standard Python libraries.
 
-## Requirements
+Current Processing Pipeline
 
-```bash
+Text Preprocessing
+
+Regex-based text cleaning
+
+Stopword filtering
+
+Normalization
+
+Feature Extraction
+
+TfidfVectorizer from scikit-learn
+
+Semantic Similarity
+
+Cosine similarity between job descriptions and resumes
+
+Skill Matching
+
+Regex-based dictionary extraction for relevant skills
+
+Candidate Ranking
+
+Combined scoring based on semantic similarity and skill coverage
+
+This approach keeps the application lightweight, fast, and deployable without large NLP dependencies.
+
+Installation
+
+Install dependencies:
+
 pip install -r requirements.txt
+
+Run the application:
+
 streamlit run app.py
-```
-
-## Project Structure
-
-```text
+Project Structure
 Hirely/
-├── app.py
-├── ml_pipeline.py
-├── requirements.txt
-```
+│
+├── app.py            # Streamlit application interface
+├── ml_pipeline.py    # Resume processing and ranking logic
+├── requirements.txt  # Project dependencies
+Future Enhancements
 
-## Notes on alternatives
+The current architecture allows easy integration of more advanced NLP systems if deeper analysis is required.
 
-If you want deeper NLP later without spaCy, this codebase is ready for drop-in enrichment with:
+Potential upgrades include:
 
-- `stanza` for linguistic pipelines
-- `transformers` for contextual embeddings/classification
-- `nltk` for additional lexical processing
-- scikit-learn text processing for lightweight deployment
+Transformers (Hugging Face) — contextual embeddings for improved semantic matching
+
+Stanza — full linguistic pipelines
+
+NLTK — expanded lexical analysis
+
+Sentence Transformers — semantic embeddings for high-accuracy resume ranking
+
+These can be added without major changes to the current pipeline.
+
+Use Cases
+
+Hirely is suitable for:
+
+HR teams screening large volumes of resumes
+
+Early-stage recruiting automation
+
+AI/ML demo projects for recruitment technology
+
+Educational NLP and machine learning projects
+
+License
+
+This project is intended for educational and demonstration purposes.
