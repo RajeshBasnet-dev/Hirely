@@ -67,18 +67,16 @@ with st.sidebar:
     st.session_state.theme = st.toggle("Light mode", value=st.session_state.theme == "Light") and "Light" or "Dark"
     page = st.radio(
         "Navigation",
-        [
-            "Dashboard",
-            "1) Upload & Parse",
-            "2) Job Requirements",
-            "3) Rank Candidates",
-            "4) Results & Exports",
-        ],
+        ["Dashboard", "Create Job Description", "Upload Resumes", "Candidate Ranking", "Candidate Insights", "Ranker Evaluation"],
     )
     st.markdown("---")
     st.caption(f"Skills in taxonomy: {len(SKILL_DICTIONARY)}")
 
-render_header(page)
+    if st.sidebar.button("Clear Session"):
+        st.session_state.clear()
+        st.experimental_rerun()
+
+st.markdown(f"<div class='hirely-header'>{page}</div>", unsafe_allow_html=True)
 
 if page == "Dashboard":
     candidates = st.session_state.candidates
@@ -305,10 +303,10 @@ elif page == "4) Results & Exports":
                     color="candidate:N",
                     tooltip=["candidate", "skill", "score"],
                 )
-                .properties(height=420)
-            )
-            st.altair_chart(radar, use_container_width=True)
-        else:
-            st.caption("Add required skills in Step 2 to generate radar alignment.")
 
-st.markdown("<div class='hirely-footer'>Hirely • AI Resume Screening Platform • Built for recruiters and hiring teams</div>", unsafe_allow_html=True)
+elif page == "Ranker Evaluation":
+    from evaluation import evaluate_benchmark
+
+    results_df = evaluate_benchmark()
+    st.header("Ranker Evaluation Results")
+    st.dataframe(results_df, use_container_width=True)

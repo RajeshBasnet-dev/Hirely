@@ -2,7 +2,4 @@ streamlit
 scikit-learn
 pandas
 numpy
-nltk
-transformers
-torch
 pymupdf
