@@ -1,4 +1,4 @@
-Hirely — AI-Powered Resume Screening Platform
+Hirely AI-Powered Resume Screening Platform
 
 Hirely is a lightweight AI-driven resume screening application built with Streamlit. It enables recruiters to quickly evaluate candidate resumes against a job description using natural language processing techniques such as text preprocessing, skill extraction, and semantic similarity ranking.
 
