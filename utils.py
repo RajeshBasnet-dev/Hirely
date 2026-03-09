@@ -1,33 +1,45 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
-from typing import Iterable, List, Dict, Any
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Iterable, List
+import json
 import re
 
 
-SKILL_DICTIONARY: List[str] = [
-    "Python",
-    "SQL",
-    "Machine Learning",
-    "Django",
-    "React",
-    "Data Analysis",
-    "Statistics",
-    "Deep Learning",
-    "NLP",
-    "TensorFlow",
-    "PyTorch",
-    "AWS",
-    "Docker",
-    "Git",
-    "FastAPI",
-    "Flask",
-    "Power BI",
-    "Tableau",
-    "Spark",
-    "Pandas",
-    "NumPy",
-]
+SKILLS_PATH = Path(__file__).parent / "data" / "skills.json"
+
+
+def load_skill_dictionary(path: Path = SKILLS_PATH) -> List[str]:
+    """Load normalized skill list from JSON file."""
+    if not path.exists():
+        return []
+
+    with path.open("r", encoding="utf-8") as f:
+        raw = json.load(f)
+
+    if not isinstance(raw, list):
+        raise ValueError("skills.json must contain a JSON list of skills")
+
+    # normalize + de-dupe preserving order
+    seen: set[str] = set()
+    skills: list[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        skill = item.strip()
+        if not skill:
+            continue
+        key = skill.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        skills.append(skill)
+
+    return skills
+
+
+SKILL_DICTIONARY: List[str] = load_skill_dictionary()
 
 
 @dataclass
@@ -36,15 +48,17 @@ class CandidateRecord:
     resume_text: str
     cleaned_text: str
     extracted_skills: List[str]
-    match_score: float = 0.0
-    missing_skills: List[str] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
-        data = asdict(self)
-        data["extracted_skills"] = ", ".join(self.extracted_skills)
-        data["missing_skills"] = ", ".join(self.missing_skills or [])
-        data["match_score"] = round(self.match_score, 2)
-        return data
+
+@dataclass
+class RankedCandidate(CandidateRecord):
+    match_score: float
+    semantic_score: float
+    skill_match_pct: float
+    missing_skills: List[str]
+
+    def to_dict(self) -> dict:
+        return asdict(self)
 
 
 def safe_candidate_name(filename: str, resume_text: str) -> str:
@@ -61,8 +75,9 @@ def parse_required_skills(raw_skills: str | Iterable[str]) -> List[str]:
         parts = re.split(r"[,\n;]+", raw_skills)
     else:
         parts = list(raw_skills)
+
     skills = [p.strip() for p in parts if p and p.strip()]
-    # De-duplicate preserving order
+
     seen = set()
     unique = []
     for skill in skills:

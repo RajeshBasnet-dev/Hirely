@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Dict, Iterable, List
 import re
 
@@ -8,17 +9,13 @@ from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS, TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 from skill_extractor import extract_skills
+from utils import RankedCandidate
 
 
 TOKEN_PATTERN = re.compile(r"[a-zA-Z][a-zA-Z0-9+#.-]*")
 
 
 def preprocess_text(text: str) -> str:
-    """Normalize resume/job text using regex tokenization and stop-word removal.
-
-    This implementation intentionally avoids spaCy/pydantic dependencies so it works
-    cleanly on Python 3.14.
-    """
     lowered = text.lower()
     tokens = TOKEN_PATTERN.findall(lowered)
     filtered = [token for token in tokens if token not in ENGLISH_STOP_WORDS]
@@ -49,28 +46,33 @@ def rank_candidates(job_text: str, candidates: List[Dict], required_skills: Iter
         return []
 
     required_lower = {skill.lower().strip() for skill in required_skills if skill.strip()}
-
     similarities = _build_similarity_scores(job_text, [candidate["cleaned_text"] for candidate in candidates])
 
     ranked: List[Dict] = []
     for idx, candidate in enumerate(candidates):
-        semantic_score = float(np.clip(similarities[idx], 0.0, 1.0) * 100)
+        semantic_similarity = float(np.clip(similarities[idx], 0.0, 1.0))
 
         candidate_skill_set = {skill.lower() for skill in candidate.get("extracted_skills", [])}
+        overlap = len(required_lower.intersection(candidate_skill_set))
+        skill_match_ratio = overlap / max(1, len(required_lower)) if required_lower else 1.0
         missing = sorted(skill for skill in required_lower if skill not in candidate_skill_set)
-        skill_match = (1 - (len(missing) / max(1, len(required_lower)))) * 100 if required_lower else 100
 
-        blended_score = (0.7 * semantic_score) + (0.3 * skill_match)
+        final_score = ((0.7 * semantic_similarity) + (0.3 * skill_match_ratio)) * 100
 
-        ranked.append(
-            {
-                **candidate,
-                "match_score": round(blended_score, 2),
-                "missing_skills": [skill.title() for skill in missing],
-                "skill_match_pct": round(skill_match, 2),
-                "semantic_score": round(semantic_score, 2),
-            }
+        ranked_candidate = RankedCandidate(
+            name=candidate["name"],
+            resume_text=candidate["resume_text"],
+            cleaned_text=candidate["cleaned_text"],
+            extracted_skills=candidate.get("extracted_skills", []),
+            match_score=round(final_score, 2),
+            semantic_score=round(semantic_similarity * 100, 2),
+            skill_match_pct=round(skill_match_ratio * 100, 2),
+            missing_skills=[skill.title() for skill in missing],
         )
+        candidate_dict = asdict(ranked_candidate)
+        if "id" in candidate:
+            candidate_dict["id"] = candidate["id"]
+        ranked.append(candidate_dict)
 
     ranked.sort(key=lambda item: item["match_score"], reverse=True)
     return ranked
