@@ -1,9 +1,8 @@
 streamlit
-spacy==3.7.2
-pydantic==1.10.13
 scikit-learn
 pandas
 numpy
 nltk
-sentence-transformers
+transformers
+torch
 pymupdf
