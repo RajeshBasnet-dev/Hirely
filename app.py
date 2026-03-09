@@ -1,31 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-import io
 from collections import Counter
+
+import altair as alt
 import pandas as pd
 import streamlit as st
 
 from database import HirelyDB
 from ml_pipeline import analyze_resume, preprocess_text, rank_candidates
 from resume_parser import parse_pdf
+from theme import THEMES, inject_css
 from utils import CandidateRecord, SKILL_DICTIONARY, parse_required_skills, safe_candidate_name
 
 
 st.set_page_config(page_title="Hirely — AI Resume Screening", page_icon="🧠", layout="wide")
 
 db = HirelyDB()
-
-CUSTOM_CSS = """
-<style>
-.block-container {padding-top: 1.2rem; padding-bottom: 2rem;}
-.hirely-card {background: #0f172a; border: 1px solid #1e293b; border-radius: 14px; padding: 1rem 1.2rem;}
-.hirely-muted {color: #94a3b8; font-size: 0.9rem;}
-.hirely-header {font-size: 1.5rem; font-weight: 700; margin-bottom: 0.4rem;}
-.score-label {font-size: 0.85rem; color: #94a3b8; margin-top: 0.2rem;}
-</style>
-"""
-st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 if "job" not in st.session_state:
     latest_job = db.get_latest_job()
@@ -39,14 +30,47 @@ if "candidates" not in st.session_state:
     st.session_state.candidates = db.load_candidates()
 if "ranked_candidates" not in st.session_state:
     st.session_state.ranked_candidates = db.load_results()
+if "theme" not in st.session_state:
+    st.session_state.theme = "Dark"
+
+st.markdown(inject_css(THEMES[st.session_state.theme]), unsafe_allow_html=True)
+
+
+def render_header(page_name: str) -> None:
+    st.markdown(
+        f"""
+        <div class='hirely-shell'>
+            <p class='hirely-logo'>Hirely AI • Resume Intelligence Cloud</p>
+            <p class='hirely-subtitle'>Modern screening workflow: Upload → Parse → Rank → Insights</p>
+            <span class='hirely-pill'>{page_name}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def metric_card(label: str, value: str) -> None:
+    st.markdown(
+        f"""
+        <div class='hirely-card'>
+            <p class='hirely-kpi-label'>{label}</p>
+            <p class='hirely-kpi-value'>{value}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 
 with st.sidebar:
-    st.title("Hirely")
-    st.caption(f"Skill taxonomy size: {len(SKILL_DICTIONARY)}")
+    st.markdown("### 🧠 Hirely")
+    st.caption("Investor-ready AI hiring dashboard")
+    st.session_state.theme = st.toggle("Light mode", value=st.session_state.theme == "Light") and "Light" or "Dark"
     page = st.radio(
         "Navigation",
         ["Dashboard", "Create Job Description", "Upload Resumes", "Candidate Ranking", "Candidate Insights", "Ranker Evaluation"],
     )
+    st.markdown("---")
+    st.caption(f"Skills in taxonomy: {len(SKILL_DICTIONARY)}")
 
     if st.sidebar.button("Clear Session"):
         st.session_state.clear()
@@ -57,116 +81,152 @@ st.markdown(f"<div class='hirely-header'>{page}</div>", unsafe_allow_html=True)
 if page == "Dashboard":
     candidates = st.session_state.candidates
     ranked = st.session_state.ranked_candidates
+
     total = len(candidates)
-    avg_score = round(sum(c.get("match_score", 0) for c in ranked) / len(ranked), 2) if ranked else 0.0
-    top_name = ranked[0]["name"] if ranked else "—"
+    analyzed = len(ranked)
+    avg_score = round(sum(c.get("match_score", 0) for c in ranked) / analyzed, 1) if analyzed else 0
+    top_candidate = ranked[0]["name"] if ranked else "—"
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total Resumes Uploaded", total)
-    c2.metric("Candidates Analyzed", len(ranked))
-    c3.metric("Average Match Score", f"{avg_score}%")
-    c4.metric("Top Candidate", top_name)
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        metric_card("Total Candidates", str(total))
+    with m2:
+        metric_card("Profiles Ranked", str(analyzed))
+    with m3:
+        metric_card("Average Match", f"{avg_score}%")
+    with m4:
+        metric_card("Top Candidate", top_candidate)
 
-    st.markdown("### Recent Candidates")
-    if candidates:
-        df = pd.DataFrame([
-            {
-                "Candidate": c["name"],
-                "Skills": ", ".join(c["extracted_skills"][:6]),
-                "Current Match": c.get("match_score", 0),
-            }
-            for c in candidates
-        ])
-        st.dataframe(df, use_container_width=True)
+    if ranked:
+        st.markdown("### Candidate Scoreboard")
+        ranking_df = pd.DataFrame(ranked)
+        chart = (
+            alt.Chart(ranking_df)
+            .mark_bar(cornerRadiusTopLeft=8, cornerRadiusTopRight=8)
+            .encode(
+                x=alt.X("name:N", sort="-y", title="Candidate"),
+                y=alt.Y("match_score:Q", title="Match %"),
+                color=alt.Color("match_score:Q", scale=alt.Scale(scheme="blues")),
+                tooltip=["name", "match_score", "semantic_score", "skill_match_pct"],
+            )
+            .properties(height=320)
+        )
+        st.altair_chart(chart, use_container_width=True)
+
+        st.markdown("### Skill Coverage")
+        top_skills = Counter(skill for c in ranked for skill in c["extracted_skills"]).most_common(10)
+        if top_skills:
+            skill_df = pd.DataFrame(top_skills, columns=["skill", "count"])
+            st.altair_chart(
+                alt.Chart(skill_df)
+                .mark_bar(cornerRadius=6)
+                .encode(x="count:Q", y=alt.Y("skill:N", sort="-x"), color=alt.value(THEMES[st.session_state.theme].secondary)),
+                use_container_width=True,
+            )
+
+        heat_df = ranking_df[["name", "semantic_score", "skill_match_pct", "match_score"]].melt(
+            id_vars="name", var_name="metric", value_name="score"
+        )
+        st.markdown("### Match Heatmap")
+        heat = (
+            alt.Chart(heat_df)
+            .mark_rect(cornerRadius=4)
+            .encode(
+                x=alt.X("metric:N", title=None),
+                y=alt.Y("name:N", title=None),
+                color=alt.Color("score:Q", scale=alt.Scale(scheme="teals")),
+                tooltip=["name", "metric", "score"],
+            )
+            .properties(height=260)
+        )
+        st.altair_chart(heat, use_container_width=True)
     else:
-        st.info("No resumes uploaded yet.")
+        st.info("Start by uploading resumes and running ranking to populate the SaaS dashboard.")
 
-elif page == "Create Job Description":
-    with st.container(border=True):
-        st.subheader("Define the role")
-        title = st.text_input("Job title", value=st.session_state.job["title"], placeholder="e.g. Senior Data Scientist")
-        description = st.text_area(
-            "Job description",
-            value=st.session_state.job["description"],
-            height=220,
-            placeholder="Paste the job description including responsibilities and qualifications...",
-        )
-        skills_raw = st.text_area(
-            "Required skills (comma/newline separated)",
-            value=", ".join(st.session_state.job["required_skills"]),
-            placeholder="Python, SQL, Machine Learning, NLP",
-            height=100,
-        )
+elif page == "1) Upload & Parse":
+    st.subheader("Step 1: Upload resumes")
+    uploads = st.file_uploader("Drag and drop PDF resumes", type=["pdf"], accept_multiple_files=True)
 
-        if st.button("Save Job Description", type="primary"):
-            required_skills = parse_required_skills(skills_raw)
-            job_id = db.save_job(title.strip(), description.strip(), required_skills)
-            st.session_state.job = {
-                "title": title.strip(),
-                "description": description.strip(),
-                "required_skills": required_skills,
-                "id": job_id,
-            }
-            st.success(f"Job profile saved to SQLite (job_id={job_id}).")
-
-elif page == "Upload Resumes":
-    uploads = st.file_uploader("Upload PDF resumes", type=["pdf"], accept_multiple_files=True)
-
-    if uploads and st.button("Process Resumes", type="primary"):
+    if uploads and st.button("Parse Uploaded Resumes", type="primary"):
         processed = []
         progress = st.progress(0)
         for idx, file in enumerate(uploads, 1):
-            data = file.getvalue()
-            text = parse_pdf(data)
+            text = parse_pdf(file.getvalue())
             analysis = analyze_resume(text, SKILL_DICTIONARY)
-            name = safe_candidate_name(file.name, text)
-
             record = CandidateRecord(
-                name=name,
+                name=safe_candidate_name(file.name, text),
                 resume_text=text,
                 cleaned_text=analysis["cleaned_text"],
                 extracted_skills=analysis["skills"],
             )
             processed.append(asdict(record))
-            progress.progress(idx / len(uploads))
+            progress.progress(idx / len(uploads), text=f"Parsing {file.name}")
 
-        candidate_ids = db.replace_candidates(processed)
-        for idx, candidate_id in enumerate(candidate_ids):
-            processed[idx]["id"] = candidate_id
+        ids = db.replace_candidates(processed)
+        for idx, cid in enumerate(ids):
+            processed[idx]["id"] = cid
 
         st.session_state.candidates = processed
         st.session_state.ranked_candidates = []
-        st.success(f"Processed and stored {len(processed)} resumes.")
+        st.success(f"Parsed {len(processed)} resumes. Move to Step 2.")
 
     if st.session_state.candidates:
+        st.markdown("### Parsed candidate cards")
         for candidate in st.session_state.candidates:
-            with st.expander(candidate["name"], expanded=False):
+            with st.expander(f"{candidate['name']} • {len(candidate['extracted_skills'])} skills", expanded=False):
                 c1, c2 = st.columns([1, 2])
-                c1.markdown("**Extracted Skills**")
-                c1.write(", ".join(candidate["extracted_skills"]) if candidate["extracted_skills"] else "No known skills found")
-                c2.markdown("**Resume Preview**")
+                c1.markdown("**Top extracted skills**")
+                c1.write(", ".join(candidate["extracted_skills"][:12]) if candidate["extracted_skills"] else "No known skills")
+                c2.markdown("**Resume snippet**")
                 st.text_area(
-                    f"preview_{candidate['name']}",
-                    value=candidate["resume_text"][:1400],
-                    height=180,
-                    key=f"ta_{candidate['name']}",
+                    "Resume preview",
+                    value=candidate["resume_text"][:1500],
+                    key=f"preview_{candidate['name']}",
                     disabled=True,
+                    height=180,
                     label_visibility="collapsed",
                 )
 
-elif page == "Candidate Ranking":
+elif page == "2) Job Requirements":
+    st.subheader("Step 2: Define the target role")
+    title = st.text_input("Job title", value=st.session_state.job["title"], placeholder="Senior Data Scientist")
+    description = st.text_area(
+        "Job description",
+        value=st.session_state.job["description"],
+        height=240,
+        placeholder="Paste responsibilities, preferred qualifications, and required domain experience.",
+    )
+    skills_raw = st.text_area(
+        "Required skills",
+        value=", ".join(st.session_state.job["required_skills"]),
+        placeholder="Python, NLP, SQL, MLOps, Experimentation",
+        height=110,
+    )
+
+    if st.button("Save role profile", type="primary"):
+        required_skills = parse_required_skills(skills_raw)
+        job_id = db.save_job(title.strip(), description.strip(), required_skills)
+        st.session_state.job = {
+            "title": title.strip(),
+            "description": description.strip(),
+            "required_skills": required_skills,
+            "id": job_id,
+        }
+        st.success("Role profile saved. Move to Step 3 for ranking.")
+
+elif page == "3) Rank Candidates":
     job = st.session_state.job
     candidates = st.session_state.candidates
 
+    st.subheader("Step 3: AI ranking")
     if not job["description"]:
-        st.warning("Please create a job description first.")
+        st.warning("Add a job description in Step 2 first.")
     elif not candidates:
-        st.warning("Please upload and process resumes first.")
+        st.warning("Upload and parse resumes in Step 1 first.")
     else:
-        if st.button("Run Ranking", type="primary"):
-            job_text = preprocess_text(job["description"])
+        if st.button("Run AI Ranking", type="primary"):
             ranked = rank_candidates(
-                job_text=job_text,
+                job_text=preprocess_text(job["description"]),
                 candidates=candidates,
                 required_skills=job["required_skills"],
             )
@@ -176,63 +236,72 @@ elif page == "Candidate Ranking":
 
         ranked = st.session_state.ranked_candidates
         if ranked:
-            df = pd.DataFrame([
-                {
-                    "Candidate Name": c["name"],
-                    "Match Score": c["match_score"],
-                    "Extracted Skills": ", ".join(c["extracted_skills"]),
-                    "Missing Skills": ", ".join(c["missing_skills"]),
-                }
-                for c in ranked
-            ])
-            st.dataframe(df, use_container_width=True)
+            st.success("Ranking completed.")
+            for item in ranked:
+                st.markdown(f"**{item['name']}**")
+                st.progress(item["match_score"] / 100, text=f"Overall match {item['match_score']}%")
 
-            st.markdown("### Match Progress")
-            for c in ranked:
-                st.write(f"**{c['name']}** — {c['match_score']}%")
-                st.progress(int(c["match_score"]) / 100)
-
-elif page == "Candidate Insights":
+elif page == "4) Results & Exports":
+    st.subheader("Step 4: Review, filter, and export")
     ranked = st.session_state.ranked_candidates
 
     if not ranked:
-        st.info("Run candidate ranking to view insights.")
+        st.info("Run ranking in Step 3 to unlock insights and export actions.")
     else:
-        left, right = st.columns([3, 2])
-        with left:
-            st.subheader("Candidate Comparison")
-            comp_df = pd.DataFrame(
-                {
-                    "Candidate": [c["name"] for c in ranked],
-                    "Match Score": [c["match_score"] for c in ranked],
-                    "Skill Match %": [c["skill_match_pct"] for c in ranked],
-                }
-            ).set_index("Candidate")
-            st.bar_chart(comp_df)
+        df = pd.DataFrame(ranked)
+        max_score = int(df["match_score"].max())
+        score_filter = st.slider("Minimum match score", min_value=0, max_value=100, value=min(65, max_score))
+        skill_filter = st.text_input("Filter by skill keyword", placeholder="python / sql / leadership")
+        title_filter = st.text_input("Filter by job-title text in resume", placeholder="data scientist")
 
-        with right:
-            st.subheader("Skill Frequency")
-            all_skills = [skill for c in ranked for skill in c["extracted_skills"]]
-            freq = Counter(all_skills)
-            if freq:
-                sf = pd.DataFrame({"Skill": list(freq.keys()), "Count": list(freq.values())}).set_index("Skill")
-                st.bar_chart(sf)
-            else:
-                st.write("No skills extracted yet.")
+        filtered = df[df["match_score"] >= score_filter]
+        if skill_filter:
+            needle = skill_filter.lower().strip()
+            filtered = filtered[filtered["extracted_skills"].apply(lambda skills: any(needle in s.lower() for s in skills))]
+        if title_filter:
+            tneedle = title_filter.lower().strip()
+            filtered = filtered[filtered["resume_text"].str.lower().str.contains(tneedle, na=False)]
 
-        st.markdown("### Candidate-Level Explanations")
-        for c in ranked:
-            with st.expander(f"{c['name']} — {c['match_score']}%"):
-                cols = st.columns(3)
-                cols[0].metric("Semantic Similarity", f"{c['semantic_score']}%")
-                cols[1].metric("Skill Match", f"{c['skill_match_pct']}%")
-                cols[2].metric("Missing Skills", len(c["missing_skills"]))
+        sort_col = st.selectbox("Sort table by", ["match_score", "semantic_score", "skill_match_pct", "name"])
+        ascending = st.toggle("Ascending sort", value=False)
+        filtered = filtered.sort_values(by=sort_col, ascending=ascending)
 
-                st.markdown(f"**Missing Skills:** {', '.join(c['missing_skills']) if c['missing_skills'] else 'None'}")
-                st.markdown(f"**Resume Highlights:** {', '.join(c['extracted_skills'][:8]) or 'No highlights found'}")
-                st.markdown(
-                    "**Match Explanation:** Final score = 0.7×semantic_similarity + 0.3×skill_match_ratio, then scaled to 0-100. "
-                    f"This profile scored {c['semantic_score']}% semantically and {c['skill_match_pct']}% on required skills."
+        table_df = filtered[["name", "match_score", "semantic_score", "skill_match_pct", "missing_skills", "extracted_skills"]].copy()
+        table_df.columns = ["Candidate", "Match %", "Semantic %", "Skill Match %", "Missing Skills", "Top Skills"]
+        st.dataframe(table_df, use_container_width=True, hide_index=True)
+
+        st.download_button(
+            "Download filtered candidates (CSV)",
+            data=table_df.to_csv(index=False).encode("utf-8"),
+            file_name="hirely_top_candidates.csv",
+            mime="text/csv",
+            type="primary",
+        )
+
+        st.markdown("### Candidate skill alignment (radar-style)")
+        required = st.session_state.job.get("required_skills", [])[:8]
+        if required:
+            radar_rows = []
+            top_n = filtered.head(3)
+            for _, row in top_n.iterrows():
+                candidate_skills = {s.lower() for s in row["extracted_skills"]}
+                for skill in required:
+                    radar_rows.append(
+                        {
+                            "candidate": row["name"],
+                            "skill": skill,
+                            "score": 100 if skill.lower() in candidate_skills else 25,
+                        }
+                    )
+            radar_df = pd.DataFrame(radar_rows)
+            radar = (
+                alt.Chart(radar_df)
+                .mark_line(point=True)
+                .encode(
+                    theta=alt.Theta("skill:N", sort=required),
+                    radius=alt.Radius("score:Q", scale=alt.Scale(domain=[0, 100])),
+                    color="candidate:N",
+                    tooltip=["candidate", "skill", "score"],
                 )
 
 elif page == "Ranker Evaluation":
