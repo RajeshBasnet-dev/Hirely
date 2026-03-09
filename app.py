@@ -172,7 +172,7 @@ elif page == "1) Upload & Parse":
 
     if st.session_state.candidates:
         st.markdown("### Parsed candidate cards")
-        for candidate in st.session_state.candidates:
+        for idx, candidate in enumerate(st.session_state.candidates):
             with st.expander(f"{candidate['name']} • {len(candidate['extracted_skills'])} skills", expanded=False):
                 c1, c2 = st.columns([1, 2])
                 c1.markdown("**Top extracted skills**")
@@ -181,7 +181,7 @@ elif page == "1) Upload & Parse":
                 st.text_area(
                     "Resume preview",
                     value=candidate["resume_text"][:1500],
-                    key=f"preview_{candidate['name']}",
+                    key=f"preview_{candidate.get('id', idx)}_{candidate['name']}",
                     disabled=True,
                     height=180,
                     label_visibility="collapsed",
