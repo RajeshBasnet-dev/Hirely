@@ -1,19 +1,33 @@
 from __future__ import annotations
 
 from typing import Iterable, List, Dict
+import re
 import subprocess
 import sys
 
 import numpy as np
-import spacy
 from sentence_transformers import SentenceTransformer
+from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 from sklearn.metrics.pairwise import cosine_similarity
 
 from skill_extractor import extract_skills
 
 
+def _import_spacy():
+    try:
+        import spacy  # type: ignore
+
+        return spacy
+    except ImportError:
+        return None
+
+
 def load_spacy_model():
-    """Load spaCy English model, downloading on first run if needed."""
+    """Load spaCy model if available; otherwise return None and use fallback preprocessing."""
+    spacy = _import_spacy()
+    if spacy is None:
+        return None
+
     try:
         return spacy.load("en_core_web_sm")
     except OSError:
@@ -23,7 +37,10 @@ def load_spacy_model():
             capture_output=True,
             text=True,
         )
-        return spacy.load("en_core_web_sm")
+        try:
+            return spacy.load("en_core_web_sm")
+        except OSError:
+            return None
 
 
 class NLPResources:
@@ -47,8 +64,19 @@ class NLPResources:
 resources = NLPResources()
 
 
+def _fallback_preprocess_text(text: str) -> str:
+    lowered = text.lower()
+    tokens = re.findall(r"[a-zA-Z][a-zA-Z0-9+#.-]*", lowered)
+    filtered = [tok for tok in tokens if tok not in ENGLISH_STOP_WORDS]
+    return " ".join(filtered)
+
+
 def preprocess_text(text: str) -> str:
-    doc = resources.nlp(text.lower())
+    nlp = resources.nlp
+    if nlp is None:
+        return _fallback_preprocess_text(text)
+
+    doc = nlp(text.lower())
     tokens = [
         tok.lemma_.strip() if tok.lemma_ else tok.text.strip()
         for tok in doc

@@ -55,3 +55,22 @@ streamlit run app.py
 3. Click **Process Resumes**.
 4. Open **Candidate Ranking** and click **Run Ranking**.
 5. Explore **Candidate Insights** charts and profile-level explanations.
+
+
+## Troubleshooting
+
+### `ModuleNotFoundError: No module named "spacy"`
+
+Install dependencies first:
+
+```bash
+pip install -r requirements.txt
+```
+
+If you still don’t have the spaCy model:
+
+```bash
+python -m spacy download en_core_web_sm
+```
+
+The app now includes a fallback text preprocessing path so it can start even if spaCy/model installation is missing, but best ranking quality is achieved with spaCy installed.
